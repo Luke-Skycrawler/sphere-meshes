@@ -97,10 +97,10 @@ private:
         // no need to resize VF for now
         return w;
     }
-    Vector3f compute_normal(const Vector3i &f) const;
+    Vector3f compute_normal(const Vector3i &f, const Vector3f &n0) const;
 };
 
-Vector3f SphereMesh::compute_normal(const Vector3i &f) const{
+Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const{
     const float tol = 1e-6;
     Vector3f v0 = V.row(f[0]);
     Vector3f v1 = V.row(f[1]);
@@ -122,7 +122,7 @@ Vector3f SphereMesh::compute_normal(const Vector3i &f) const{
     };
     // f(n) = (r01 ^T, r12^T, n^T) n - (r0 - r1, r1 - r2, 1)^T
     // solve for f(n) = 0
-    Vector3f n = (v1 - v0).cross(v2 - v0).normalized();
+    Vector3f n = n0;
     auto res = residue(n);
     while (res.squaredNorm() > tol) {
         A.row(2) = 2 * n;
@@ -130,6 +130,7 @@ Vector3f SphereMesh::compute_normal(const Vector3i &f) const{
         n -= dn;
         res = residue(n);
     }
+    assert(n.dot(n0) > 0.0f);
     return n.normalized();
 }
 
@@ -175,7 +176,7 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
             }
 
             F.row(fu) = Fu; 
-            N.row(fu) = compute_normal(Fu);
+            N.row(fu) = compute_normal(Fu, N.row(fu));
 
             // construct face adj list for new node w
             VF.conservativeResize(VF.rows() + 1);
