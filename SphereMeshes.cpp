@@ -44,7 +44,7 @@ struct SphereMesh {
     Eigen::Vector<bool, -1> valid;
     vector<vector<int>> adj;
     Eigen::VectorXi NI;
-    Eigen::MatrixXi VF;
+    Eigen::VectorXi VF;
 
     // per-face attributes
     Eigen::MatrixXi F;
@@ -111,7 +111,8 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
     for (int i = NI(u); i < NI(u + 1); i ++) {
         Vector3i face = F.row(VF(i, 0));
 
-        int j = VF(i, 1);
+        int j = 0;
+        for (int k = 0; k < 3; k ++) if (face[k] == u) j = k;
         int offset = 1 + (i - NI(u)) * 3;
         Vector3f p0 = V.row(face[0]); 
         Vector3f p1 = V.row(face[1]);
@@ -163,10 +164,10 @@ Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const
 SQEM SphereMesh::Q(int u) const {
     // computes spherical quadric error metric for vertex u
     SQEM q;
-    Vector3f Vu(V(u));
+    Vector3f Vu{V.row(u)};
     for (int i = NI(u); i < NI(u + 1); i ++) {
         int fu = VF(i);
-        Vector3f nu {N(fu)};
+        Vector3f nu {N.row(fu)};
         assert(Fvalid(fu));
         Vector3f _Vu = Vu + nu * R(u);
         q += SQEM(_Vu, nu);
@@ -176,7 +177,7 @@ SQEM SphereMesh::Q(int u) const {
 
 ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
     SQEM sqem {Q(u) + Q(v)};
-    Vector3f center, Vu(V(u)), Vv(V(v));
+    Vector3f center, Vu(V.row(u)), Vv(V.row(v));
     float r;
     auto fanu = polygon_fan(u), fanv = polygon_fan(v);
     MatrixX3f fanuv(fanu.rows() + fanv.rows(), 3);
@@ -202,18 +203,20 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
         if (Fu[0] != v && Fu[1] != v && Fu[2] != v) {
             // one of the vertex in {u, v}
             // face still valid but replace the vertex with w
-            int iw = 0;
-            for (int i = 0; i < 3; i++) if (Fu(i) == u) {
-                Fu(i) = w;
-                iw = i;
-            }
+
+            
+            // int iw = 0;
+            // for (int i = 0; i < 3; i++) if (Fu(i) == u) {
+            //     Fu(i) = w;
+            //     iw = i;
+            // }
 
             F.row(fu) = Fu; 
             N.row(fu) = compute_normal(Fu, N.row(fu));
 
             // construct face adj list for new node w
             VF.conservativeResize(VF.rows() + 1);
-            VF.row(VF.rows() - 1) = Vector2i{fu, iw};
+            VF(VF.rows() - 1) = fu;
             NI(w + 1) += 1;
 
             for (int i = 0; i < 3; i ++) {  // assuming triangle mesh
