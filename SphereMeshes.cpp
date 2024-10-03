@@ -11,6 +11,7 @@
 #include <iostream>
 #include <algorithm>
 #include <assert.h>
+#include "DirectionalWidth.h"
 using namespace std;
 using namespace Eigen;
 
@@ -53,7 +54,7 @@ struct SphereMesh {
 
     Eigen::MatrixXi E;
     int nv, ne, nf, nv_valid;
-    SphereMesh(const string &filename = "bar.obj") {
+    SphereMesh(const string &filename = "bar.obj"): dw(30) {
         igl::readOBJ(filename, V, F);
         igl::edges(F, E);
         nv = V.rows();
@@ -79,6 +80,8 @@ struct SphereMesh {
     }
     void simplify(int nv_target);
 private: 
+    DirectionalWidth dw;
+    MatrixXf polygon_fan(int u) const;
     ColapsedEdge argmin_sqe(int u, int v) const;
     priority_queue<ColapsedEdge> q;
     void reconnect_triangles(int u, int v, int w);
@@ -100,8 +103,31 @@ private:
     Vector3f compute_normal(const Vector3i &f, const Vector3f &n0) const;
 };
 
+MatrixXf SphereMesh::polygon_fan(int u) const{
+    Vector3f pu {V.row(u)};
+    int len = (NI(u + 1) - NI(u)) * 3 + 1;
+    MatrixXf ret(len, 3);   
+    ret.row(0) = pu;
+    for (int i = NI(u); i < NI(u + 1); i ++) {
+        Vector3i face = F.row(VF(i, 0));
+
+        int j = VF(i, 1);
+        int offset = 1 + (i - NI(u)) * 3;
+        Vector3f p0 = V.row(face[0]); 
+        Vector3f p1 = V.row(face[1]);
+        Vector3f p2 = V.row(face[2]);
+        Vector3f barycenter = (p0 + p1 + p2) / 3.0f;
+        ret.row(offset ++) = barycenter;
+        for (int ii = 0; ii < 3; ii++)
+            if (ii != j) {
+                ret.row(offset ++) = (V.row(face[ii]) + V.row(face[j])) * 0.5f;
+            }
+    }
+    return ret;
+}
+
 Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const{
-    const float tol = 1e-6;
+    const float tol = 1e-6f;
     Vector3f v0 = V.row(f[0]);
     Vector3f v1 = V.row(f[1]);
     Vector3f v2 = V.row(f[2]);
@@ -152,7 +178,14 @@ ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
     SQEM sqem {Q(u) + Q(v)};
     Vector3f center, Vu(V(u)), Vv(V(v));
     float r;
-    sqem.minimize(center, r, Vu, Vv);
+    auto fanu = polygon_fan(u), fanv = polygon_fan(v);
+    MatrixX3f fanuv(fanu.rows() + fanv.rows(), 3);
+    fanuv.block(0, 0, fanu.rows(), 3) = fanu;
+    fanuv.block(fanu.rows(), 0, fanv.rows(), 3) = fanv;
+
+    float radius_bound = dw.W(fanu);
+    sqem.minimize(center, r, Vu, Vv, radius_bound);
+
     return {static_cast<float>(sqem.evaluate(center, r)), u, v, {center, r}};
 }
 
