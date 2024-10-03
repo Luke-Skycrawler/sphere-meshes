@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 
 project(SphereMeshes)
 
-add_executable(SphereMeshes sphere-meshes.cpp
+add_executable(SphereMeshes SphereMeshes.cpp
 SQEM.h
 )
 
