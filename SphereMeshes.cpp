@@ -4,6 +4,7 @@
 #include <igl/readOBJ.h>
 #include <igl/edges.h>
 #include <igl/per_face_normals.h>
+#include <igl/readOFF.h>
 #include <Eigen/Dense>
 #include <iostream>
 #include <algorithm>
@@ -48,7 +49,8 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
     return ret;
 }
 SphereMesh::SphereMesh(const std::string &filename){
-    igl::readOBJ(filename, V, F);
+    //igl::readOBJ(filename, V, F);
+    igl::readOFF(filename, V, F);
     igl::edges(F, E);
     nv = V.rows();
     ne = E.rows(); 
@@ -243,10 +245,12 @@ void SphereMesh::simplify(int nv_target) {
     }
     MatrixXf Vnew(nv_valid, 3);
     VectorXf Rnew(nv_valid);
+    VectorXi Vmap(nv);
     int v = 0;
     for (int i = 0; i < nv;  i ++ ) {
         if (valid(i)) {
             Rnew(v) = R(i);
+            Vmap(i) = v;
             Vnew.row(v++) = V.row(i);
         }
     }
@@ -254,10 +258,14 @@ void SphereMesh::simplify(int nv_target) {
     R = Rnew;
 
     MatrixXi Fnew(nf, 3);
+    const auto map = [&](Vector3i f) -> Vector3i {
+        return {Vmap(f(0)), Vmap(f(1)), Vmap(f(2))};
+    };
     int f = 0;
     for (int i = 0; i < nf; i ++) {
         if (Fvalid(i)) {
-            Fnew.row(f++) = F.row(i);
+            Vector3i fi{F.row(i)};
+            Fnew.row(f++) = map(fi);
         }
     }
     F = Fnew;
@@ -267,8 +275,6 @@ void SphereMesh::simplify(int nv_target) {
 void SphereMesh::export_ply(const string &fname) const {
 
     std::string plyname = fname;
-    plyname += ".ply";
-
     std::ofstream fout(plyname);
 
     //	GraphVertexIterator gvi,gvi_end;
@@ -284,11 +290,11 @@ void SphereMesh::export_ply(const string &fname) const {
     fout << "end_header" << endl;
     
 
-    for(int i = 0; i < V.rows(); i ++) if (valid(i))
+    for(int i = 0; i < V.rows(); i ++)
         fout << setiosflags(ios::fixed) << setprecision(15) << V(i, 0) << " " << V(i, 1) << " " << V(i, 2) << " " << R[i] << std::endl;
 
 
-    for (int i = 0; i < F.rows(); i++) if (Fvalid(i)) {
+    for (int i = 0; i < F.rows(); i++) {
         if (F(i, 2) == INVALID) {
             fout << "2 " << F(i, 0) << " " << F(i, 1) << std::endl;
         }
