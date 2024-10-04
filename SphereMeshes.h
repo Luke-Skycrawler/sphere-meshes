@@ -37,7 +37,7 @@ struct SphereMesh {
 
 
     Eigen::MatrixXi E;
-    int nv, ne, nf, nv_valid;
+    int nv, ne, nf, nv_valid, nf_valid;
     void simplify(int nv_target);
     Eigen::Vector3f compute_normal(const Eigen::Vector3i &f, const Eigen::Vector3f &n0) const;
 

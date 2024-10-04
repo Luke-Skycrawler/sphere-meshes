@@ -12,6 +12,7 @@
 
 using namespace std;
 using namespace Eigen;
+static const int INVALID = -1;
 
 void remove_duplicates(vector<int> &a) {
     sort(a.begin(), a.end());
@@ -76,6 +77,9 @@ Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const
     float r0 = R(f[0]);
     float r1 = R(f[1]);
     float r2 = R(f[2]);
+
+
+
     auto r01 = v1 - v0;
     auto r12 = v2 - v1;
 
