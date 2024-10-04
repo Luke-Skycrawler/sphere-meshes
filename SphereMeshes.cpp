@@ -1,107 +1,24 @@
 #include "SQEM.h"
-#include <queue> 
-#include <vector>
 #include <igl/adjacency_list.h>
 #include <igl/vertex_triangle_adjacency.h>
 #include <igl/readOBJ.h>
 #include <igl/edges.h>
 #include <igl/per_face_normals.h>
 #include <Eigen/Dense>
-#include <string>
 #include <iostream>
 #include <algorithm>
 #include <assert.h>
-#include "DirectionalWidth.h"
+#include "SphereMeshes.h"
+
 using namespace std;
 using namespace Eigen;
 
-struct Sphere {
-    Vector3f q; 
-    float r;
-};
-struct ColapsedEdge {
-    float c;
-    int u, v;
-    Sphere s;
-
-    bool operator < (const ColapsedEdge &e) const {
-        return c < e.c;
-    }
-    
-
-};
 
 void remove_duplicates(vector<int> &a) {
     sort(a.begin(), a.end());
     auto last = std::unique(a.begin(), a.end());
     a.erase(last, a.end());
 }
-
-struct SphereMesh {
-    // per-vertex attributes
-    Eigen::MatrixXf V;
-    Eigen::VectorXf R;
-    Eigen::Vector<bool, -1> valid;
-    vector<vector<int>> adj;
-    Eigen::VectorXi NI;
-    Eigen::VectorXi VF;
-
-    // per-face attributes
-    Eigen::MatrixXi F;
-    Eigen::MatrixXf N;
-    Eigen::Vector<bool, -1> Fvalid; 
-
-
-    Eigen::MatrixXi E;
-    int nv, ne, nf, nv_valid;
-    SphereMesh(const string &filename = "bar.obj"): dw(30) {
-        igl::readOBJ(filename, V, F);
-        igl::edges(F, E);
-        nv = V.rows();
-        ne = E.rows(); 
-        nf = F.rows();
-
-        Fvalid.resize(nf);
-        Fvalid.fill(true);
-        igl::per_face_normals_stable(V, F, N);
-        assert(N.rows() == nf);
-
-        valid.resize(nv);
-        valid.fill(true);
-        R.resize(nv);
-        R.fill(0.0f);
-        igl::vertex_triangle_adjacency(F, nv, VF, NI);
-        igl::adjacency_list(F, adj);
-        assert(adj.size() == nv);
-        // does not include isolate vertices
-        assert(NI.rows() == nv + 1);
-        assert(VF.rows() == nv);
-
-    }
-    void simplify(int nv_target);
-private: 
-    DirectionalWidth dw;
-    MatrixXf polygon_fan(int u) const;
-    ColapsedEdge argmin_sqe(int u, int v) const;
-    priority_queue<ColapsedEdge> q;
-    void reconnect_triangles(int u, int v, int w);
-    SQEM Q(int u) const;
-    inline int add_sphere(const Sphere& s) {
-        int w = nv ++;
-        V.conservativeResize(nv, NoChange);
-        V.row(w) = s.q;
-        R.conservativeResize(nv);
-        R(w) = s.r;
-        valid.conservativeResize(nv);
-        valid(w) = true;
-        adj.push_back({});
-        NI.conservativeResize(nv + 1);
-        NI(w) = NI(w - 1);
-        // no need to resize VF for now
-        return w;
-    }
-    Vector3f compute_normal(const Vector3i &f, const Vector3f &n0) const;
-};
 
 MatrixXf SphereMesh::polygon_fan(int u) const{
     Vector3f pu {V.row(u)};
@@ -125,6 +42,30 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
             }
     }
     return ret;
+}
+SphereMesh::SphereMesh(const std::string &filename){
+    igl::readOBJ(filename, V, F);
+    igl::edges(F, E);
+    nv = V.rows();
+    ne = E.rows(); 
+    nf = F.rows();
+
+    Fvalid.resize(nf);
+    Fvalid.fill(true);
+    igl::per_face_normals_stable(V, F, N);
+    assert(N.rows() == nf);
+
+    valid.resize(nv);
+    valid.fill(true);
+    R.resize(nv);
+    R.fill(0.0f);
+    igl::vertex_triangle_adjacency(F, nv, VF, NI);
+    igl::adjacency_list(F, adj);
+    assert(adj.size() == nv);
+    // does not include isolate vertices
+    assert(NI.rows() == nv + 1);
+    assert(VF.rows() == nv);
+
 }
 
 Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const{
@@ -270,12 +211,4 @@ void SphereMesh::simplify(int nv_target) {
         
     }
 
-}
-int main() {
-
-
-    SphereMesh mesh("bar.obj");
-    mesh.simplify(10);
-    
-    return 0;
 }
