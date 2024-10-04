@@ -47,72 +47,38 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
     return ret;
 }
 SphereMesh::SphereMesh(const std::string &filename){
-        igl::readOBJ(filename, V, F);
-        igl::edges(F, E);
-        nv = V.rows();
-        ne = E.rows(); 
-        nf = F.rows();
-        nv_valid = nv;
-        nf_valid = nf;
+    igl::readOBJ(filename, V, F);
+    igl::edges(F, E);
+    nv = V.rows();
+    ne = E.rows(); 
+    nf = F.rows();
+    nv_valid = nv;
+    nf_valid = nf;
 
-        Fvalid.resize(nf);
-        Fvalid.fill(true);
-        igl::per_face_normals_stable(V, F, N);
-        assert(N.rows() == nf);
+    Fvalid.resize(nf);
+    Fvalid.fill(true);
+    igl::per_face_normals_stable(V, F, N);
+    assert(N.rows() == nf);
 
-        valid.resize(nv);
-        valid.fill(true);
-        R.resize(nv);
-        R.fill(0.0f);
-        igl::vertex_triangle_adjacency(F, nv, VF, NI);
-        igl::adjacency_list(F, adj);
-        assert(adj.size() == nv);
-        // does not include isolate vertices
-        assert(NI.rows() == nv + 1);
-        assert(VF.rows() == NI(nv));
-
+    valid.resize(nv);
+    valid.fill(true);
+    R.resize(nv);
+    R.fill(0.0f);
+    node_q.resize(nv);
+    node_fan.resize(nv);
+    igl::vertex_triangle_adjacency(F, nv, VF, NI);
+    igl::adjacency_list(F, adj);
+    assert(adj.size() == nv);
+    // does not include isolate vertices
+    assert(NI.rows() == nv + 1);
+    assert(VF.rows() == NI(nv));
+    for (int i = 0; i < nv; i++) {
+        node_q[i] = Q(i);
+        auto pf{ polygon_fan(i) };
+        node_fan[i] = dw.eval(pf);
+    }
 }
 
-Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const{
-    const float tol = 1e-6f;
-    return n0;
-    if (f[0] == INVALID || f[1] == INVALID || f[2] == INVALID) {
-        return Vector3f(0.0f, 0.0f, 0.0f);
-    }
-    Vector3f v0 = V.row(f[0]);
-    Vector3f v1 = V.row(f[1]);
-    Vector3f v2 = V.row(f[2]);
-
-    float r0 = R(f[0]);
-    float r1 = R(f[1]);
-    float r2 = R(f[2]);
-
-
-
-    auto r01 = v1 - v0;
-    auto r12 = v2 - v1;
-
-    Vector3f b{r0 - r1, r1 - r2, 1.0f};
-    Matrix3f A;
-    A.row(0) = r01;
-    A.row(1) = r12;
-    const auto residue = [&](const Vector3f &n) -> Vector3f {
-        A.row(2) = n;
-        return A * n - b;
-    };
-    // f(n) = (r01 ^T, r12^T, n^T) n - (r0 - r1, r1 - r2, 1)^T
-    // solve for f(n) = 0
-    Vector3f n = n0;
-    auto res = residue(n);
-    while (res.squaredNorm() > tol) {
-        A.row(2) = 2 * n;
-        auto dn = A.inverse() * res;
-        n -= dn;
-        res = residue(n);
-    }
-    assert(n.dot(n0) > 0.0f);
-    return n.normalized();
-}
 
 SQEM SphereMesh::Q(int u) const {
     // computes spherical quadric error metric for vertex u
@@ -142,18 +108,22 @@ float SphereMesh::area(const Vector3i &f) const {
     return 0.5f * e0.cross(e1).norm();
 }
 ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
-    SQEM sqem {Q(u) + Q(v)};
+    // SQEM sqem {Q(u) + Q(v)};
+    SQEM sqem{node_q[u] + node_q[v]};
     Vector3f center, Vu(V.row(u)), Vv(V.row(v));
     float r;
-    auto fanu = polygon_fan(u), fanv = polygon_fan(v);
-    MatrixX3f fanuv(fanu.rows() + fanv.rows(), 3);
-    fanuv.block(0, 0, fanu.rows(), 3) = fanu;
-    fanuv.block(fanu.rows(), 0, fanv.rows(), 3) = fanv;
+    auto boundu = node_fan[u], boundv = node_fan[v];
+    int n_dirs = dw.n_dirs + 3;
+    VectorXf lu = boundu.col(0), lv = boundv.col(0);
+    VectorXf uu = boundu.col(1), uv = boundv.col(1);
+    auto boundw = MatrixXf(n_dirs, 2);
+    boundw.col(0) = lu.cwiseMin(lv);
+    boundw.col(1) = uu.cwiseMax(uv);
+    float radius_bound = dw.W(boundw);
 
-    float radius_bound = dw.W(fanu);
     sqem.minimize(center, r, Vu, Vv, radius_bound);
     double c = sqem.evaluate(center, r);
-    return {static_cast<float>(c), u, v, {center, r}};
+    return {static_cast<float>(c), u, v, {center, r}, sqem, boundw};
 }
 
 void SphereMesh::reconnect_triangles(int u, int v, int w){
@@ -167,60 +137,39 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
         int fu = VF(jj);
         if (Fvalid(fu)) {
 
-        Vector3i Fu = F.row(fu);
-        if (Fu[0] != v && Fu[1] != v && Fu[2] != v) {
-            // one of the vertex in {u, v}
-            // face still valid but replace the vertex with w
-
-
-            int iw = 0;
-            for (int i = 0; i < 3; i++) if (Fu(i) == u) {
-                Fu(i) = w;
-                iw = i;
-            }
-
-            F.row(fu) = Fu; 
-            N.row(fu) = compute_normal(Fu, N.row(fu));
-
-            // construct face adj list for new node w
-            VF.conservativeResize(VF.rows() + 1);
-            VF(VF.rows() - 1) = fu;
-            NI(w + 1) += 1;
-
-
-            // for (int i = 0; i < 3; i ++) {  // assuming triangle mesh
-            //     int j = Fu(i);
-            //     if (j != w && j != INVALID) {
-            //         assert(j != v && valid(j));
-            //         // delete u from adjacent list and replace them with w
-            //         auto it = find(adj[j].begin(), adj[j].end(), u);
-            //         if(it != adj[j].end()){
-            //             *it = w;
-            //         }
-
-            //         // construct vertex adj list for new node w
-            //         adj[w].push_back(j);
-
-            //     }
-            // }
-
-
-        } else {
-            // face with collapsed edge uv
-            for (int i = 0; i < 3; i ++) {
-                if (Fu(i) != u && Fu(i) != v && Fu(i) != INVALID) {
-                    // triangle collapsed to an edge 
-                    Fu = {w, Fu(i), INVALID};
-                    break;       
+            Vector3i Fu = F.row(fu);
+            if (Fu[0] != v && Fu[1] != v && Fu[2] != v) {
+                // one of the vertex in {u, v}
+                // still a triangle, replace the vertex with w
+                int iw = 0;
+                for (int i = 0; i < 3; i++) if (Fu(i) == u) {
+                    Fu(i) = w;
+                    iw = i;
                 }
-                else if (i == 2) {
-                    // edge collapsed to a point
-                    Fvalid(fu) = false;
-                    nf_valid --;
+
+                F.row(fu) = Fu; 
+                // N.row(fu) = compute_normal(Fu, N.row(fu));
+
+                // construct face adj list for new node w
+                VF.conservativeResize(VF.rows() + 1);
+                VF(VF.rows() - 1) = fu;
+                NI(w + 1) += 1;
+            } else {
+                // face with collapsed edge uv
+                for (int i = 0; i < 3; i ++) {
+                    if (Fu(i) != u && Fu(i) != v && Fu(i) != INVALID) {
+                        // triangle collapsed to an edge 
+                        F.row(fu) = Vector3i{w, Fu(i), INVALID};
+                        break;       
+                    }
+                    else if (i == 2) {
+                        // edge collapsed to a point
+                        Fvalid(fu) = false;
+                        nf_valid --;
+                    }
                 }
             }
-        }
-    
+        
         }
     }
 
@@ -248,7 +197,7 @@ void SphereMesh::simplify(int nv_target) {
         
         if (valid(cuv.u) && valid(cuv.v)) {
             int u = cuv.u, v = cuv.v;           
-            int w = add_sphere(cuv.s);
+            int w = add_sphere(cuv);
 
             reconnect_triangles(u, v, w);
             reconnect_triangles(v, u, w);
@@ -283,4 +232,5 @@ void SphereMesh::simplify(int nv_target) {
         }
     }
     F = Fnew;
+    F.conservativeResize(f, NoChange);
 }

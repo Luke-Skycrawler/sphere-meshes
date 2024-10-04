@@ -12,12 +12,11 @@ struct ColapsedEdge {
     float c;
     int u, v;
     Sphere s;
-
+    SQEM q;
+    Eigen::MatrixXf fan;
     bool operator < (const ColapsedEdge &e) const {
-        return c < e.c;
+        return c > e.c;
     }
-    
-
 };
 
 
@@ -29,6 +28,8 @@ struct SphereMesh {
     std::vector<std::vector<int>> adj;
     Eigen::VectorXi NI;
     Eigen::VectorXi VF;
+    std::vector<SQEM> node_q; 
+    std::vector<Eigen::MatrixXf> node_fan;
 
     // per-face attributes
     Eigen::MatrixXi F;
@@ -50,14 +51,18 @@ struct SphereMesh {
     SQEM Q(int u) const;
     SphereMesh::SphereMesh(const std::string &filename = "bar.obj");
     float area(const Eigen::Vector3i &f) const;
-    inline int add_sphere(const Sphere& s) {
+    inline int add_sphere(ColapsedEdge &cuv) {
         int w = nv ++;
+        auto s {cuv.s};
+        auto sqe {cuv.q};
         V.conservativeResize(nv, Eigen::NoChange);
         V.row(w) = s.q;
         R.conservativeResize(nv);
         R(w) = s.r;
         valid.conservativeResize(nv);
         valid(w) = true;
+        node_q.push_back(sqe);
+        node_fan.push_back(cuv.fan);
         adj.push_back({});
         NI.conservativeResize(nv + 1);
         NI(w + 1) = NI(w);

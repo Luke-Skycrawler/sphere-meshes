@@ -32,10 +32,14 @@ DirectionalWidth::DirectionalWidth(int n_dirs): n_dirs(n_dirs)
     dirs.block(3, 0, n_dirs, 3) = fibonacci_lattice(n_dirs);
 }
 
-float DirectionalWidth::W(Eigen::MatrixXf &P) const {
-    float ret = numeric_limits<float>::max();
-    
-    for (int j = 0; j < n_dirs; j++) {
+float DirectionalWidth::W(Eigen::MatrixXf &bounds) const {
+    auto b = bounds.col(1) - bounds.col(0);
+    return b.minCoeff();
+} 
+
+MatrixXf DirectionalWidth::eval(const MatrixXf &P) const {
+    MatrixXf ret(n_dirs + 3, 2);
+    for (int j = 0; j < n_dirs + 3; j++) {
         float min = numeric_limits<float>::max(), max = numeric_limits<float>::lowest();
         for (int i = 0; i < P.rows(); i ++) {
             Vector3f p = P.row(i);
@@ -43,7 +47,8 @@ float DirectionalWidth::W(Eigen::MatrixXf &P) const {
             if (dot < min) min = dot;
             if (dot > max) max = dot;
         }
-        if (max - min < ret) ret = max - min;
+        ret(j, 0) = min;
+        ret(j, 1) = max;
     }
     return ret;
-} 
+}
