@@ -49,7 +49,7 @@ struct SphereMesh {
     void reconnect_triangles(int u, int v, int w);
     SQEM Q(int u) const;
     SphereMesh::SphereMesh(const std::string &filename = "bar.obj");
-
+    float area(const Eigen::Vector3i &f) const;
     inline int add_sphere(const Sphere& s) {
         int w = nv ++;
         V.conservativeResize(nv, Eigen::NoChange);
@@ -60,7 +60,7 @@ struct SphereMesh {
         valid(w) = true;
         adj.push_back({});
         NI.conservativeResize(nv + 1);
-        NI(w) = NI(w - 1);
+        NI(w + 1) = NI(w);
         // no need to resize VF for now
         return w;
     }

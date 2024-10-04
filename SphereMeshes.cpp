@@ -23,14 +23,16 @@ void remove_duplicates(vector<int> &a) {
 MatrixXf SphereMesh::polygon_fan(int u) const{
     Vector3f pu {V.row(u)};
     int len = (NI(u + 1) - NI(u)) * 3 + 1;
-    MatrixXf ret(len, 3);   
-    ret.row(0) = pu;
-    for (int i = NI(u); i < NI(u + 1); i ++) {
-        Vector3i face = F.row(VF(i, 0));
 
-        int j = 0;
+    MatrixXf ret(len, 3);   
+    int offset = 0;
+    ret.row(offset++) = pu;
+    for (int i = NI(u); i < NI(u + 1); i ++) if (Fvalid(VF(i))) {
+        Vector3i face = F.row(VF(i));
+
+        int j = -1;
         for (int k = 0; k < 3; k ++) if (face[k] == u) j = k;
-        int offset = 1 + (i - NI(u)) * 3;
+        assert(j != -1);
         Vector3f p0 = V.row(face[0]); 
         Vector3f p1 = V.row(face[1]);
         Vector3f p2 = V.row(face[2]);
@@ -41,35 +43,42 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
                 ret.row(offset ++) = (V.row(face[ii]) + V.row(face[j])) * 0.5f;
             }
     }
+    ret.conservativeResize(offset, NoChange);
     return ret;
 }
 SphereMesh::SphereMesh(const std::string &filename){
-    igl::readOBJ(filename, V, F);
-    igl::edges(F, E);
-    nv = V.rows();
-    ne = E.rows(); 
-    nf = F.rows();
+        igl::readOBJ(filename, V, F);
+        igl::edges(F, E);
+        nv = V.rows();
+        ne = E.rows(); 
+        nf = F.rows();
+        nv_valid = nv;
+        nf_valid = nf;
 
-    Fvalid.resize(nf);
-    Fvalid.fill(true);
-    igl::per_face_normals_stable(V, F, N);
-    assert(N.rows() == nf);
+        Fvalid.resize(nf);
+        Fvalid.fill(true);
+        igl::per_face_normals_stable(V, F, N);
+        assert(N.rows() == nf);
 
-    valid.resize(nv);
-    valid.fill(true);
-    R.resize(nv);
-    R.fill(0.0f);
-    igl::vertex_triangle_adjacency(F, nv, VF, NI);
-    igl::adjacency_list(F, adj);
-    assert(adj.size() == nv);
-    // does not include isolate vertices
-    assert(NI.rows() == nv + 1);
-    assert(VF.rows() == nv);
+        valid.resize(nv);
+        valid.fill(true);
+        R.resize(nv);
+        R.fill(0.0f);
+        igl::vertex_triangle_adjacency(F, nv, VF, NI);
+        igl::adjacency_list(F, adj);
+        assert(adj.size() == nv);
+        // does not include isolate vertices
+        assert(NI.rows() == nv + 1);
+        assert(VF.rows() == NI(nv));
 
 }
 
 Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const{
     const float tol = 1e-6f;
+    return n0;
+    if (f[0] == INVALID || f[1] == INVALID || f[2] == INVALID) {
+        return Vector3f(0.0f, 0.0f, 0.0f);
+    }
     Vector3f v0 = V.row(f[0]);
     Vector3f v1 = V.row(f[1]);
     Vector3f v2 = V.row(f[2]);
@@ -108,17 +117,30 @@ Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const
 SQEM SphereMesh::Q(int u) const {
     // computes spherical quadric error metric for vertex u
     SQEM q;
+    q.setZero();
     Vector3f Vu{V.row(u)};
-    for (int i = NI(u); i < NI(u + 1); i ++) {
+    assert(valid(u));
+    for (int i = NI(u); i < NI(u + 1); i ++) if (Fvalid(VF(i))){
         int fu = VF(i);
         Vector3f nu {N.row(fu)};
-        assert(Fvalid(fu));
         Vector3f _Vu = Vu + nu * R(u);
-        q += SQEM(_Vu, nu);
+        q += SQEM(_Vu, nu) * (area(F.row(fu)) / 3.0);
     }
     return q;
 }
 
+float SphereMesh::area(const Vector3i &f) const {
+
+    if (f[0] == INVALID || f[1] == INVALID || f[2] == INVALID) {
+        return 0.0f;
+    }
+    Vector3f v0 = V.row(f[0]);
+    Vector3f v1 = V.row(f[1]);
+    Vector3f v2 = V.row(f[2]);
+    Vector3f e0 = v1 - v0;
+    Vector3f e1 = v2 - v0;
+    return 0.5f * e0.cross(e1).norm();
+}
 ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
     SQEM sqem {Q(u) + Q(v)};
     Vector3f center, Vu(V.row(u)), Vv(V.row(v));
@@ -130,8 +152,8 @@ ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
 
     float radius_bound = dw.W(fanu);
     sqem.minimize(center, r, Vu, Vv, radius_bound);
-
-    return {static_cast<float>(sqem.evaluate(center, r)), u, v, {center, r}};
+    double c = sqem.evaluate(center, r);
+    return {static_cast<float>(c), u, v, {center, r}};
 }
 
 void SphereMesh::reconnect_triangles(int u, int v, int w){
@@ -141,19 +163,21 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
     NOTE: often need to call reconnect(v, u, w) as well
     *****************************************************/
     valid(u) = false;
-    for (auto fu: adj[u]) {
-        assert(valid(fu));
+    for (int jj = NI(u); jj < NI(u + 1); jj ++) {
+        int fu = VF(jj);
+        if (Fvalid(fu)) {
+
         Vector3i Fu = F.row(fu);
         if (Fu[0] != v && Fu[1] != v && Fu[2] != v) {
             // one of the vertex in {u, v}
             // face still valid but replace the vertex with w
 
 
-            // int iw = 0;
-            // for (int i = 0; i < 3; i++) if (Fu(i) == u) {
-            //     Fu(i) = w;
-            //     iw = i;
-            // }
+            int iw = 0;
+            for (int i = 0; i < 3; i++) if (Fu(i) == u) {
+                Fu(i) = w;
+                iw = i;
+            }
 
             F.row(fu) = Fu; 
             N.row(fu) = compute_normal(Fu, N.row(fu));
@@ -163,20 +187,22 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
             VF(VF.rows() - 1) = fu;
             NI(w + 1) += 1;
 
-            for (int i = 0; i < 3; i ++) {  // assuming triangle mesh
-                int j = Fu(i);
-                if (j != w && j != INVALID) {
-                    assert(j != v && valid(j));
-                    // delete u from adjacent list and replace them with w
-                    auto it = find(adj[j].begin(), adj[j].end(), u);
-                    assert(it != adj[j].end());
-                    *it = w;
 
-                    // construct vertex adj list for new node w
-                    adj[w].push_back(j);
+            // for (int i = 0; i < 3; i ++) {  // assuming triangle mesh
+            //     int j = Fu(i);
+            //     if (j != w && j != INVALID) {
+            //         assert(j != v && valid(j));
+            //         // delete u from adjacent list and replace them with w
+            //         auto it = find(adj[j].begin(), adj[j].end(), u);
+            //         if(it != adj[j].end()){
+            //             *it = w;
+            //         }
 
-                }
-            }
+            //         // construct vertex adj list for new node w
+            //         adj[w].push_back(j);
+
+            //     }
+            // }
 
 
         } else {
@@ -184,7 +210,7 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
             for (int i = 0; i < 3; i ++) {
                 if (Fu(i) != u && Fu(i) != v && Fu(i) != INVALID) {
                     // triangle collapsed to an edge 
-                    Fu = {w, i, INVALID};
+                    Fu = {w, Fu(i), INVALID};
                     break;       
                 }
                 else if (i == 2) {
@@ -194,7 +220,21 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
                 }
             }
         }
+    
+        }
     }
+
+    for (auto i: adj[u]) {
+        if (valid(i) && i != v){
+            auto it = find(adj[i].begin(), adj[i].end(), u);
+            if (it != adj[i].end()) {
+                *it = w;
+            }
+            adj[w].push_back(i);
+        }
+    }
+
+
 }
 void SphereMesh::simplify(int nv_target) {
     for (int i = 0; i < ne; i ++) {
@@ -233,6 +273,7 @@ void SphereMesh::simplify(int nv_target) {
         }
     }
     V = Vnew;
+    R = Rnew;
 
     MatrixXi Fnew(nf, 3);
     int f = 0;
