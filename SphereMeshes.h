@@ -40,7 +40,8 @@ struct SphereMesh {
     Eigen::MatrixXi E;
     int nv, ne, nf, nv_valid, nf_valid;
     void simplify(int nv_target);
-    Eigen::Vector3f compute_normal(const Eigen::Vector3i &f, const Eigen::Vector3f &n0) const;
+    // Eigen::Vector3f compute_normal(const Eigen::Vector3i &f, const Eigen::Vector3f &n0) const;
+    void export_ply(const std::string &filename) const;
 
 // private: 
     DirectionalWidth dw;
@@ -51,6 +52,7 @@ struct SphereMesh {
     SQEM Q(int u) const;
     SphereMesh::SphereMesh(const std::string &filename = "bar.obj");
     float area(const Eigen::Vector3i &f) const;
+    void delete_face(int f);
     inline int add_sphere(ColapsedEdge &cuv) {
         int w = nv ++;
         auto s {cuv.s};

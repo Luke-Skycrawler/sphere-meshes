@@ -8,6 +8,7 @@
 #include <iostream>
 #include <algorithm>
 #include <assert.h>
+#include <iomanip>
 #include "SphereMeshes.h"
 
 using namespace std;
@@ -68,6 +69,7 @@ SphereMesh::SphereMesh(const std::string &filename){
     node_fan.resize(nv);
     igl::vertex_triangle_adjacency(F, nv, VF, NI);
     igl::adjacency_list(F, adj);
+    // TODO: assert adj is sorted
     assert(adj.size() == nv);
     // does not include isolate vertices
     assert(NI.rows() == nv + 1);
@@ -159,13 +161,34 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
                 for (int i = 0; i < 3; i ++) {
                     if (Fu(i) != u && Fu(i) != v && Fu(i) != INVALID) {
                         // triangle collapsed to an edge 
-                        F.row(fu) = Vector3i{w, Fu(i), INVALID};
+                        int j = Fu(i);
+                        sort(adj[u].begin(), adj[u].end());
+                        sort(adj[j].begin(), adj[j].end());
+                        sort(adj[v].begin(), adj[v].end());
+                        vector<int> uj_inter, vj_inter;
+
+                        set_intersection(adj[u].begin(), adj[u].end(), adj[j].begin(), adj[j].end(), back_inserter(uj_inter));
+                        set_intersection(adj[v].begin(), adj[v].end(), adj[j].begin(), adj[j].end(), back_inserter(vj_inter));
+
+                        const auto filter = [&](int x) {
+                            return valid(x) && x != v;
+                        };
+
+                        int countu = count_if(adj[u].begin(), adj[u].end(), filter);
+                        int countv = count_if(adj[v].begin(), adj[v].end(), filter);
+                        
+
+                        if (countu || countv) {
+                            delete_face(fu);
+                        }
+                        else {
+                            F.row(fu) = Vector3i{w, j, INVALID};
+                        }
                         break;       
                     }
                     else if (i == 2) {
                         // edge collapsed to a point
-                        Fvalid(fu) = false;
-                        nf_valid --;
+                        delete_face(fu);
                     }
                 }
             }
@@ -184,6 +207,12 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
     }
 
 
+}
+
+void SphereMesh::delete_face(int f) {
+    // lazy delete
+    nf_valid --;
+    Fvalid(f) = false;
 }
 void SphereMesh::simplify(int nv_target) {
     for (int i = 0; i < ne; i ++) {
@@ -233,4 +262,41 @@ void SphereMesh::simplify(int nv_target) {
     }
     F = Fnew;
     F.conservativeResize(f, NoChange);
+}
+
+void SphereMesh::export_ply(const string &fname) const {
+
+    std::string plyname = fname;
+    plyname += ".ply";
+
+    std::ofstream fout(plyname);
+
+    //	GraphVertexIterator gvi,gvi_end;
+    fout << "ply" << std::endl;
+    fout << "format ascii 1.0" << std::endl;
+    fout << "element vertex " << nv_valid << std::endl;
+    fout << "property float x" << endl;
+    fout << "property float y" << endl;
+    fout << "property float z" << endl;
+    fout << "property float r" << endl;
+    fout << "element face " << nf_valid << endl;
+    fout << "property list uchar uint vertex_indices" << endl;
+    fout << "end_header" << endl;
+    
+
+    for(int i = 0; i < V.rows(); i ++) if (valid(i))
+        fout << setiosflags(ios::fixed) << setprecision(15) << V(i, 0) << " " << V(i, 1) << " " << V(i, 2) << " " << R[i] << std::endl;
+
+
+    for (int i = 0; i < F.rows(); i++) if (Fvalid(i)) {
+        if (F(i, 2) == INVALID) {
+            fout << "2 " << F(i, 0) << " " << F(i, 1) << std::endl;
+        }
+        else {
+            fout << "3 " << F(i, 0) << " " << F(i, 1) << " " << F(i, 2) << std::endl;
+        }
+    }
+    
+    fout.close();
+
 }
