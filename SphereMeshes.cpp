@@ -86,7 +86,7 @@ Vector3f SphereMesh::compute_normal(const Vector3i &f, const Vector3f &n0) const
     A.row(1) = r12;
     const auto residue = [&](const Vector3f &n) -> Vector3f {
         A.row(2) = n;
-        return b - A * n;
+        return A * n - b;
     };
     // f(n) = (r01 ^T, r12^T, n^T) n - (r0 - r1, r1 - r2, 1)^T
     // solve for f(n) = 0
