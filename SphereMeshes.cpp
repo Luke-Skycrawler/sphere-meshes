@@ -14,7 +14,7 @@
 #include "DirectionalWidth.h"
 using namespace std;
 using namespace Eigen;
-
+static const int INVALID = -1;
 struct Sphere {
     Vector3f q; 
     float r;
@@ -53,13 +53,15 @@ struct SphereMesh {
 
 
     Eigen::MatrixXi E;
-    int nv, ne, nf, nv_valid;
+    int nv, ne, nf, nv_valid, nf_valid;
     SphereMesh(const string &filename = "bar.obj"): dw(30) {
         igl::readOBJ(filename, V, F);
         igl::edges(F, E);
         nv = V.rows();
         ne = E.rows(); 
         nf = F.rows();
+        nv_valid = nv;
+        nf_valid = nf;
 
         Fvalid.resize(nf);
         Fvalid.fill(true);
@@ -75,7 +77,7 @@ struct SphereMesh {
         assert(adj.size() == nv);
         // does not include isolate vertices
         assert(NI.rows() == nv + 1);
-        assert(VF.rows() == nv);
+        assert(VF.rows() == NI(nv));
 
     }
     void simplify(int nv_target);
@@ -204,7 +206,7 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
             // one of the vertex in {u, v}
             // face still valid but replace the vertex with w
 
-            
+
             // int iw = 0;
             // for (int i = 0; i < 3; i++) if (Fu(i) == u) {
             //     Fu(i) = w;
@@ -221,8 +223,8 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
 
             for (int i = 0; i < 3; i ++) {  // assuming triangle mesh
                 int j = Fu(i);
-                assert(j != v && valid(j));
-                if (j != w) {
+                if (j != w && j != INVALID) {
+                    assert(j != v && valid(j));
                     // delete u from adjacent list and replace them with w
                     auto it = find(adj[j].begin(), adj[j].end(), u);
                     assert(it != adj[j].end());
@@ -236,8 +238,19 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
 
 
         } else {
-            // face with collapsed edge uv, invalidate it
-            Fvalid(fu) = false;
+            // face with collapsed edge uv
+            for (int i = 0; i < 3; i ++) {
+                if (Fu(i) != u && Fu(i) != v && Fu(i) != INVALID) {
+                    // triangle collapsed to an edge 
+                    Fu = {w, i, INVALID};
+                    break;       
+                }
+                else if (i == 2) {
+                    // edge collapsed to a point
+                    Fvalid(fu) = false;
+                    nf_valid --;
+                }
+            }
         }
     }
 }
@@ -267,15 +280,32 @@ void SphereMesh::simplify(int nv_target) {
             nv_valid --;
             // two vertices are collapsed into one
         }
-        
     }
+    MatrixXf Vnew(nv_valid, 3);
+    VectorXf Rnew(nv_valid);
+    int v = 0;
+    for (int i = 0; i < nv;  i ++ ) {
+        if (valid(i)) {
+            Rnew(v) = R(i);
+            Vnew.row(v++) = V.row(i);
+        }
+    }
+    V = Vnew;
 
+    MatrixXi Fnew(nf, 3);
+    int f = 0;
+    for (int i = 0; i < nf; i ++) {
+        if (Fvalid(i)) {
+            Fnew.row(f++) = F.row(i);
+        }
+    }
+    F = Fnew;
 }
 int main() {
 
 
     SphereMesh mesh("bar.obj");
-    mesh.simplify(10);
-    
+    mesh.simplify(2);
+    cout << mesh.R;
     return 0;
 }
