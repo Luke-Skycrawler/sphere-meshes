@@ -23,6 +23,8 @@ void remove_duplicates(vector<int> &a) {
 }
 
 MatrixXf SphereMeshBase::polygon_fan(int u) const{
+    auto &V {rest_shape.V};
+    
     Vector3f pu {V.row(u)};
     int len = (NI(u + 1) - NI(u)) * 3 + 1;
 
@@ -48,11 +50,20 @@ MatrixXf SphereMeshBase::polygon_fan(int u) const{
     ret.conservativeResize(offset, NoChange);
     return ret;
 }
-SphereMeshBase::SphereMeshBase(const std::string &filename){
-    //igl::readOBJ(filename, V, F);
+
+Positions::Positions(const string &filename, MatrixXi &F) {
     igl::readOFF(filename, V, F);
+    int nv = V.rows(), nf = F.rows();
+    igl::per_face_normals_stable(V, F, N);
+    assert(N.rows() == nf);
+    R.resize(nv);
+    R.fill(0.0f);
+    node_q.resize(nv);
+    dir_widths.resize(nv);
+
+}
+void SphereMeshBase::init_connectivity(){
     igl::edges(F, E);
-    nv = V.rows();
     ne = E.rows(); 
     nf = F.rows();
     nv_valid = nv;
@@ -60,15 +71,9 @@ SphereMeshBase::SphereMeshBase(const std::string &filename){
 
     Fvalid.resize(nf);
     Fvalid.fill(true);
-    igl::per_face_normals_stable(V, F, N);
-    assert(N.rows() == nf);
 
     valid.resize(nv);
     valid.fill(true);
-    R.resize(nv);
-    R.fill(0.0f);
-    node_q.resize(nv);
-    node_fan.resize(nv);
     igl::vertex_triangle_adjacency(F, nv, VF, NI);
     igl::adjacency_list(F, adj);
     // TODO: assert adj is sorted
@@ -78,31 +83,30 @@ SphereMeshBase::SphereMeshBase(const std::string &filename){
     assert(VF.rows() == NI(nv));
 }
 
-void SphereMesh::init_nodes() {
+void SphereMeshBase::init_nodes() {
     for (int i = 0; i < nv; i++) {
-        node_q[i] = Q(i);
+        rest_shape.node_q[i] = Q(i);
         auto pf{ polygon_fan(i) };
-        node_fan[i] = dw.eval(pf);
+        rest_shape.dir_widths[i] = dw.eval(pf);
     }
-
 }
 SQEM SphereMeshBase::Q(int u) const {
     // computes spherical quadric error metric for vertex u
     SQEM q;
     q.setZero();
-    Vector3f Vu{V.row(u)};
+    Vector3f Vu{rest_shape.V.row(u)};
     assert(valid(u));
     for (int i = NI(u); i < NI(u + 1); i ++) if (Fvalid(VF(i))){
         int fu = VF(i);
-        Vector3f nu {N.row(fu)};
-        Vector3f _Vu = Vu + nu * R(u);
+        Vector3f nu {rest_shape.N.row(fu)};
+        Vector3f _Vu = Vu + nu * rest_shape.R(u);
         q += SQEM(_Vu, nu) * (area(F.row(fu)) / 3.0);
     }
     return q;
 }
 
 float SphereMeshBase::area(const Vector3i &f) const {
-    return area(V, f);
+    return area(rest_shape.V, f);
 }
 
 float SphereMeshBase::area(const MatrixXf &V, const Vector3i &f) const {
@@ -120,10 +124,14 @@ float SphereMeshBase::area(const MatrixXf &V, const Vector3i &f) const {
 
 ColapsedEdge SphereMeshBase::argmin_sqe(int u, int v) const {
     // SQEM sqem {Q(u) + Q(v)};
+    auto &node_q {rest_shape.node_q};
+    auto &dir_widths {rest_shape.dir_widths};
+    auto &V {rest_shape.V};
+
     SQEM sqem{node_q[u] + node_q[v]};
     Vector3f center, Vu(V.row(u)), Vv(V.row(v));
     float r;
-    auto boundu = node_fan[u], boundv = node_fan[v];
+    auto boundu = dir_widths[u], boundv = dir_widths[v];
     int n_dirs = dw.n_dirs + 3;
     VectorXf lu = boundu.col(0), lv = boundv.col(0);
     VectorXf uu = boundu.col(1), uv = boundv.col(1);
@@ -256,13 +264,13 @@ void SphereMeshBase::simplify(int nv_target) {
     int v = 0;
     for (int i = 0; i < nv;  i ++ ) {
         if (valid(i)) {
-            Rnew(v) = R(i);
+            Rnew(v) = rest_shape.R(i);
             Vmap(i) = v;
-            Vnew.row(v++) = V.row(i);
+            Vnew.row(v++) = rest_shape.V.row(i);
         }
     }
-    V = Vnew;
-    R = Rnew;
+    rest_shape.V = Vnew;
+    rest_shape.R = Rnew;
 
     MatrixXi Fnew(nf, 3);
     const auto map = [&](Vector3i f) -> Vector3i {
@@ -296,9 +304,9 @@ void SphereMeshBase::export_ply(const string &fname) const {
     fout << "property list uchar uint vertex_indices" << endl;
     fout << "end_header" << endl;
     
-
+    auto &V {rest_shape.V};
     for(int i = 0; i < V.rows(); i ++)
-        fout << setiosflags(ios::fixed) << setprecision(15) << V(i, 0) << " " << V(i, 1) << " " << V(i, 2) << " " << R[i] << std::endl;
+        fout << setiosflags(ios::fixed) << setprecision(15) << V(i, 0) << " " << V(i, 1) << " " << V(i, 2) << " " << rest_shape.R[i] << std::endl;
 
 
     for (int i = 0; i < F.rows(); i++) {

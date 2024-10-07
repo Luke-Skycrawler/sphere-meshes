@@ -19,21 +19,49 @@ struct ColapsedEdge {
     }
 };
 
+struct Positions {
+    Eigen::MatrixXf V;
+    Eigen::VectorXf R;
+    std::vector<SQEM> node_q; 
+    std::vector<Eigen::MatrixXf> dir_widths;    
+
+    Eigen::MatrixXf N;
+    inline void new_sphere_node(const ColapsedEdge &cuv){
+        int nv = V.rows(); 
+
+        int w = nv ++;
+        V.conservativeResize(nv, Eigen::NoChange);
+        R.conservativeResize(nv);
+
+        auto s {cuv.s};
+        auto sqe {cuv.q};
+        V.row(w) = s.q;
+        R(w) = s.r;
+        node_q.push_back(cuv.q);
+        dir_widths.push_back(cuv.fan);
+    }
+    Positions(const std::string& file, Eigen::MatrixXi &F);
+    Positions() {}
+};
 
 struct SphereMeshBase {
     // per-vertex attributes
-    Eigen::MatrixXf V;
-    Eigen::VectorXf R;
     Eigen::Vector<bool, -1> valid;
     std::vector<std::vector<int>> adj;
     Eigen::VectorXi NI;
     Eigen::VectorXi VF;
-    std::vector<SQEM> node_q; 
-    std::vector<Eigen::MatrixXf> node_fan;
+
+    void SphereMeshBase::init_connectivity();
+
 
     // per-face attributes
     Eigen::MatrixXi F;
-    Eigen::MatrixXf N;
+
+    // vertex attributes vary by deformation
+    // must init after F
+    // std::vector<Positions> deformed_shapes;
+    Positions rest_shape;
+
     Eigen::Vector<bool, -1> Fvalid; 
 
 
@@ -50,38 +78,35 @@ struct SphereMeshBase {
     std::priority_queue<ColapsedEdge> q;
     void reconnect_triangles(int u, int v, int w);
     SQEM Q(int u) const;
-    SphereMeshBase(const std::string &filename = "bar.obj");
+    // SphereMeshBase(const std::string &filename = "bar.obj"): deformed_shapes({Positions(filename, F)}), rest_shape(deformed_shapes[0]) {
+    SphereMeshBase(const std::string &filename = "bar.obj"): rest_shape(filename, F) {
+        nv = rest_shape.V.rows();
+        init_connectivity();
+        init_nodes();
+    }
+
     float area(const Eigen::Vector3i &f) const;
     float area(const Eigen::MatrixXf &V, const Eigen::Vector3i &f) const;
     void delete_face(int f);
-    inline int add_sphere(ColapsedEdge &cuv) {
+    inline int new_sphere_connectivity() {
         int w = nv ++;
-        auto s {cuv.s};
-        auto sqe {cuv.q};
-
-        V.conservativeResize(nv, Eigen::NoChange);
-        V.row(w) = s.q;
-        R.conservativeResize(nv);
-        R(w) = s.r;
-
         valid.conservativeResize(nv);
         valid(w) = true;
-        node_q.push_back(sqe);
-        node_fan.push_back(cuv.fan);
         adj.push_back({});
         NI.conservativeResize(nv + 1);
         NI(w + 1) = NI(w);
         // no need to resize VF for now
         return w;
     }
-    virtual void init_nodes() = 0;
+
+    virtual inline int add_sphere(ColapsedEdge &cuv) {
+        rest_shape.new_sphere_node(cuv);
+        return new_sphere_connectivity();
+    }
+    virtual void init_nodes();
 };
 
 
 struct SphereMesh: public SphereMeshBase {
-
-    SphereMesh(const std::string &filename = "bar.obj"): SphereMeshBase(filename) {
-        init_nodes();
-    }
-    void init_nodes() override;
+    SphereMesh(const std::string &filename = "bar.obj"): SphereMeshBase(filename) {}
 };

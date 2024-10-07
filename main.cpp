@@ -3,12 +3,14 @@
 using namespace std;
 using namespace Eigen;
 int main() {
-    SphereMesh mesh("../assets/hand.off");
+    SphereMeshBase mesh("../assets/hand.off");
     //SphereMesh mesh("teapot.obj");
-
+    
+    auto &V {mesh.rest_shape.V};
+    auto &R {mesh.rest_shape.R};
     mesh.simplify(35);
-    cout << "#V = " << mesh.V.rows() << endl << mesh.V.transpose() << endl;
-    cout << "#R = " << mesh.R.rows() << endl << mesh.R.transpose() << endl;
+    cout << "#V = " << V.rows() << endl << V.transpose() << endl;
+    cout << "#R = " << R.rows() << endl << R.transpose() << endl;
     cout << "#F = " << mesh.F.rows() << endl << mesh.F << endl;
 
     mesh.export_ply("../output/hand.ply");

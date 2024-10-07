@@ -34,7 +34,7 @@ SQEMBundle BundledSphereMesh::Qbundle(int u) const {
         for (int j = NI(u); j < NI(u + 1); j ++) if (Fvalid(VF(j))){
             int fu = VF(j);
             Vector3f nu {N_deform[i].row(fu)};
-            Vector3f _Vu = Vu + nu * R(u);
+            Vector3f _Vu = Vu + nu * rest_shape.R(u);
             q.sqem[i] += SQEM(_Vu, nu) * (this->area(F.row(fu), i) / 3.0);
         }
     }
