@@ -6,22 +6,22 @@ add_executable(SphereMeshes
     main.cpp
     SphereMeshes.cpp
     DirectionalWidth.cpp
-    SQEM_bundle.cpp
+    DeformedMesh.cpp
     SQEM.h
     SphereMeshes.h
     DirectionalWidth.h
-    SQEM_bundle.h
+    DeformedMesh.h
 )
 
 add_executable(test_normal
     tests/test_normal.cpp
     SphereMeshes.cpp
     DirectionalWidth.cpp
-    SQEM_bundle.cpp
+    DeformedMesh.cpp
     SQEM.h
     SphereMeshes.h
     DirectionalWidth.h
-    SQEM_bundle.h
+    DeformedMesh.h
 )
 target_include_directories(SphereMeshes PUBLIC extern/igl
     extern/eigen3

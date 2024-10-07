@@ -16,14 +16,8 @@ using namespace std;
 using namespace Eigen;
 static const int INVALID = -1;
 
-void remove_duplicates(vector<int> &a) {
-    sort(a.begin(), a.end());
-    auto last = std::unique(a.begin(), a.end());
-    a.erase(last, a.end());
-}
 
-MatrixXf SphereMeshBase::polygon_fan(int u) const{
-    auto &V {rest_shape.V};
+MatrixXf SphereMeshBase::polygon_fan(int u, const MatrixXf &V) const{
     
     Vector3f pu {V.row(u)};
     int len = (NI(u + 1) - NI(u)) * 3 + 1;
@@ -83,11 +77,13 @@ void SphereMeshBase::init_connectivity(){
     assert(VF.rows() == NI(nv));
 }
 
-void SphereMeshBase::init_nodes() {
+void SphereMesh::init_nodes() {
     for (int i = 0; i < nv; i++) {
-        rest_shape.node_q[i] = Q(i);
-        auto pf{ polygon_fan(i) };
-        rest_shape.dir_widths[i] = dw.eval(pf);
+        for (auto &shape: deformed_shapes) {
+            auto pf{ polygon_fan(i, shape.V)};
+            shape.node_q[i] = Q(i);
+            shape.dir_widths[i] = dw.eval(pf);
+        }
     }
 }
 SQEM SphereMeshBase::Q(int u) const {
@@ -122,11 +118,11 @@ float SphereMeshBase::area(const MatrixXf &V, const Vector3i &f) const {
     return 0.5f * e0.cross(e1).norm();
 }
 
-ColapsedEdge SphereMeshBase::argmin_sqe(int u, int v) const {
+ColapsedEdge SphereMeshBase::argmin_sqe(int u, int v, const Positions &p) const {
     // SQEM sqem {Q(u) + Q(v)};
-    auto &node_q {rest_shape.node_q};
-    auto &dir_widths {rest_shape.dir_widths};
-    auto &V {rest_shape.V};
+    auto &node_q {p.node_q};
+    auto &dir_widths {p.dir_widths};
+    auto &V {p.V};
 
     SQEM sqem{node_q[u] + node_q[v]};
     Vector3f center, Vu(V.row(u)), Vv(V.row(v));
@@ -258,20 +254,25 @@ void SphereMeshBase::simplify(int nv_target) {
             // two vertices are collapsed into one
         }
     }
+    lazy_delete();
+}
+
+void SphereMeshBase::lazy_delete_vertex(Positions &p) {
     MatrixXf Vnew(nv_valid, 3);
     VectorXf Rnew(nv_valid);
     VectorXi Vmap(nv);
     int v = 0;
     for (int i = 0; i < nv;  i ++ ) {
         if (valid(i)) {
-            Rnew(v) = rest_shape.R(i);
-            Vmap(i) = v;
-            Vnew.row(v++) = rest_shape.V.row(i);
+            Rnew(v) = p.R(i);
+            Vnew.row(v++) = p.V.row(i);
         }
     }
-    rest_shape.V = Vnew;
-    rest_shape.R = Rnew;
+    p.V = Vnew;
+    p.R = Rnew;
+}
 
+void SphereMeshBase::lazy_delete_face(const VectorXi &Vmap) {
     MatrixXi Fnew(nf, 3);
     const auto map = [&](Vector3i f) -> Vector3i {
         return {Vmap(f(0)), Vmap(f(1)), Vmap(f(2))};
@@ -286,7 +287,6 @@ void SphereMeshBase::simplify(int nv_target) {
     F = Fnew;
     F.conservativeResize(f, NoChange);
 }
-
 void SphereMeshBase::export_ply(const string &fname) const {
 
     std::string plyname = fname;

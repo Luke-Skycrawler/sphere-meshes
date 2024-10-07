@@ -1,10 +1,12 @@
-#include "SphereMeshes.h"
+// #include "SphereMeshes.h"
+#include "DeformedMesh.h"
 #include <iostream>
 using namespace std;
 using namespace Eigen;
 int main() {
-    SphereMeshBase mesh("../assets/hand.off");
-    //SphereMesh mesh("teapot.obj");
+    // SphereMesh mesh("../assets/hand.off");
+    DeformedMesh mesh(1, "../assets/hand.off");
+    
     
     auto &V {mesh.rest_shape.V};
     auto &R {mesh.rest_shape.R};
