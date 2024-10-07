@@ -22,7 +22,7 @@ void remove_duplicates(vector<int> &a) {
     a.erase(last, a.end());
 }
 
-MatrixXf SphereMesh::polygon_fan(int u) const{
+MatrixXf SphereMeshBase::polygon_fan(int u) const{
     Vector3f pu {V.row(u)};
     int len = (NI(u + 1) - NI(u)) * 3 + 1;
 
@@ -48,7 +48,7 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
     ret.conservativeResize(offset, NoChange);
     return ret;
 }
-SphereMesh::SphereMesh(const std::string &filename){
+SphereMeshBase::SphereMeshBase(const std::string &filename){
     //igl::readOBJ(filename, V, F);
     igl::readOFF(filename, V, F);
     igl::edges(F, E);
@@ -76,15 +76,17 @@ SphereMesh::SphereMesh(const std::string &filename){
     // does not include isolate vertices
     assert(NI.rows() == nv + 1);
     assert(VF.rows() == NI(nv));
+}
+
+void SphereMesh::init_nodes() {
     for (int i = 0; i < nv; i++) {
         node_q[i] = Q(i);
         auto pf{ polygon_fan(i) };
         node_fan[i] = dw.eval(pf);
     }
+
 }
-
-
-SQEM SphereMesh::Q(int u) const {
+SQEM SphereMeshBase::Q(int u) const {
     // computes spherical quadric error metric for vertex u
     SQEM q;
     q.setZero();
@@ -99,8 +101,12 @@ SQEM SphereMesh::Q(int u) const {
     return q;
 }
 
-float SphereMesh::area(const Vector3i &f) const {
+float SphereMeshBase::area(const Vector3i &f) const {
+    return area(V, f);
+}
 
+float SphereMeshBase::area(const MatrixXf &V, const Vector3i &f) const {
+    
     if (f[0] == INVALID || f[1] == INVALID || f[2] == INVALID) {
         return 0.0f;
     }
@@ -111,7 +117,8 @@ float SphereMesh::area(const Vector3i &f) const {
     Vector3f e1 = v2 - v0;
     return 0.5f * e0.cross(e1).norm();
 }
-ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
+
+ColapsedEdge SphereMeshBase::argmin_sqe(int u, int v) const {
     // SQEM sqem {Q(u) + Q(v)};
     SQEM sqem{node_q[u] + node_q[v]};
     Vector3f center, Vu(V.row(u)), Vv(V.row(v));
@@ -125,12 +132,12 @@ ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
     boundw.col(1) = uu.cwiseMax(uv);
     float radius_bound = dw.W(boundw);
 
-    sqem.minimize(center, r, Vu, Vv, radius_bound);
-    double c = sqem.evaluate(center, r);
+    double c = sqem.minimize(center, r, Vu, Vv, radius_bound);
+    // double c = sqem.evaluate(center, r);
     return {static_cast<float>(c), u, v, {center, r}, sqem, boundw};
 }
 
-void SphereMesh::reconnect_triangles(int u, int v, int w){
+void SphereMeshBase::reconnect_triangles(int u, int v, int w){
     /****************************************************
     collapse edge uv to w
     reconnect all vertices adjacent to u to w
@@ -211,12 +218,12 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
 
 }
 
-void SphereMesh::delete_face(int f) {
+void SphereMeshBase::delete_face(int f) {
     // lazy delete
     nf_valid --;
     Fvalid(f) = false;
 }
-void SphereMesh::simplify(int nv_target) {
+void SphereMeshBase::simplify(int nv_target) {
     for (int i = 0; i < ne; i ++) {
         int u = E(i, 0), v = E(i, 1);
         auto cuv = argmin_sqe(u, v);
@@ -272,7 +279,7 @@ void SphereMesh::simplify(int nv_target) {
     F.conservativeResize(f, NoChange);
 }
 
-void SphereMesh::export_ply(const string &fname) const {
+void SphereMeshBase::export_ply(const string &fname) const {
 
     std::string plyname = fname;
     std::ofstream fout(plyname);

@@ -20,7 +20,7 @@ struct ColapsedEdge {
 };
 
 
-struct SphereMesh {
+struct SphereMeshBase {
     // per-vertex attributes
     Eigen::MatrixXf V;
     Eigen::VectorXf R;
@@ -50,17 +50,20 @@ struct SphereMesh {
     std::priority_queue<ColapsedEdge> q;
     void reconnect_triangles(int u, int v, int w);
     SQEM Q(int u) const;
-    SphereMesh::SphereMesh(const std::string &filename = "bar.obj");
+    SphereMeshBase(const std::string &filename = "bar.obj");
     float area(const Eigen::Vector3i &f) const;
+    float area(const Eigen::MatrixXf &V, const Eigen::Vector3i &f) const;
     void delete_face(int f);
     inline int add_sphere(ColapsedEdge &cuv) {
         int w = nv ++;
         auto s {cuv.s};
         auto sqe {cuv.q};
+
         V.conservativeResize(nv, Eigen::NoChange);
         V.row(w) = s.q;
         R.conservativeResize(nv);
         R(w) = s.r;
+
         valid.conservativeResize(nv);
         valid(w) = true;
         node_q.push_back(sqe);
@@ -71,4 +74,14 @@ struct SphereMesh {
         // no need to resize VF for now
         return w;
     }
+    virtual void init_nodes() = 0;
+};
+
+
+struct SphereMesh: public SphereMeshBase {
+
+    SphereMesh(const std::string &filename = "bar.obj"): SphereMeshBase(filename) {
+        init_nodes();
+    }
+    void init_nodes() override;
 };
