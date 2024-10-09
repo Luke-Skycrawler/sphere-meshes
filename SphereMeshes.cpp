@@ -49,8 +49,8 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
     return ret;
 }
 SphereMesh::SphereMesh(const std::string &filename){
-    //igl::readOBJ(filename, V, F);
-    igl::readOFF(filename, V, F);
+    igl::readOBJ(filename, V, F);
+    // igl::readOFF(filename, V, F);
     igl::edges(F, E);
     nv = V.rows();
     ne = E.rows(); 
@@ -123,7 +123,7 @@ ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
     auto boundw = MatrixXf(n_dirs, 2);
     boundw.col(0) = lu.cwiseMin(lv);
     boundw.col(1) = uu.cwiseMax(uv);
-    float radius_bound = dw.W(boundw);
+    float radius_bound = 0.75f * dw.W(boundw);
 
     sqem.minimize(center, r, Vu, Vv, radius_bound);
     double c = sqem.evaluate(center, r);
@@ -173,7 +173,7 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
                         set_intersection(adj[v].begin(), adj[v].end(), adj[j].begin(), adj[j].end(), back_inserter(vj_inter));
 
                         const auto filter = [&](int x) {
-                            return valid(x) && x != v;
+                            return valid(x) && x != v && x != u && x != j;
                         };
 
                         int countu = count_if(adj[u].begin(), adj[u].end(), filter);
@@ -259,7 +259,9 @@ void SphereMesh::simplify(int nv_target) {
 
     MatrixXi Fnew(nf, 3);
     const auto map = [&](Vector3i f) -> Vector3i {
-        return {Vmap(f(0)), Vmap(f(1)), Vmap(f(2))};
+        if (f(2) == INVALID) {
+            return {Vmap(f(0)), Vmap(f(1)), INVALID};
+        } else return {Vmap(f(0)), Vmap(f(1)), Vmap(f(2))};
     };
     int f = 0;
     for (int i = 0; i < nf; i ++) {

@@ -19,9 +19,9 @@ add_executable(test_normal
     SphereMeshes.h
     DirectionalWidth.h
 )
-target_include_directories(SphereMeshes PUBLIC extern/igl
+target_include_directories(SphereMeshes PUBLIC extern/libigl
     extern/eigen3
 )
-target_include_directories(test_normal PUBLIC extern/igl
+target_include_directories(test_normal PUBLIC extern/libigl
     extern/eigen3
 )
