@@ -49,8 +49,15 @@ MatrixXf SphereMesh::polygon_fan(int u) const{
     return ret;
 }
 SphereMesh::SphereMesh(const std::string &filename){
-    igl::readOBJ(filename, V, F);
-    // igl::readOFF(filename, V, F);
+    string format = filename.substr(filename.size() - 3);
+    if (format == "obj") {
+        igl::readOBJ(filename, V, F);
+    } else if (format == "off") {
+        igl::readOFF(filename, V, F);
+    } else {
+        cout << "unsupported format" << endl;
+        exit(1);
+    }
     igl::edges(F, E);
     nv = V.rows();
     ne = E.rows(); 
@@ -161,7 +168,7 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
             } else {
                 // face with collapsed edge uv
                 for (int i = 0; i < 3; i ++) {
-                    if (Fu(i) != u && Fu(i) != v && Fu(i) != INVALID) {
+                    if (Fu(i) != u && Fu(i) != v && Fu(i) != INVALID && valid(Fu(i))) {
                         // triangle collapsed to an edge 
                         int j = Fu(i);
                         sort(adj[u].begin(), adj[u].end());
@@ -176,8 +183,8 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
                             return valid(x) && x != v && x != u && x != j;
                         };
 
-                        int countu = count_if(adj[u].begin(), adj[u].end(), filter);
-                        int countv = count_if(adj[v].begin(), adj[v].end(), filter);
+                        int countu = count_if(uj_inter.begin(), uj_inter.end(), filter);
+                        int countv = count_if(vj_inter.begin(), vj_inter.end(), filter);
                         
 
                         if (countu || countv) {
@@ -199,7 +206,7 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
     }
 
     for (auto i: adj[u]) {
-        if (valid(i) && i != v){
+        if (valid(i) && i != v && i != u){
             auto it = find(adj[i].begin(), adj[i].end(), u);
             if (it != adj[i].end()) {
                 *it = w;
