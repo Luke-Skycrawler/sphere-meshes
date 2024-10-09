@@ -4,6 +4,13 @@
 #include <vector>
 #include "SQEM.h"
 #include "DirectionalWidth.h"
+
+// inline void remove_duplicates(std::vector<int> &a) {
+//     std::sort(a.begin(), a.end());
+//     auto last = std::unique(a.begin(), a.end());
+//     a.erase(last, a.end());
+// }
+
 struct Sphere {
     Eigen::Vector3f q; 
     float r;

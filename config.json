@@ -1,0 +1,5 @@
+{
+    "input_file": "../assets/bar.obj",
+    "output_file": "../output/bar_deformed.ply",
+    "nv_target": 2
+}
