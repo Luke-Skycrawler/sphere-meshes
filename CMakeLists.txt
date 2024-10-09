@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 
 project(SphereMeshes)
-
+add_subdirectory("extern/cnpy")
 add_executable(SphereMeshes 
     main.cpp
     SphereMeshes.cpp
@@ -25,7 +25,10 @@ add_executable(test_normal
 )
 target_include_directories(SphereMeshes PUBLIC extern/igl
     extern/eigen3
+    extern/cnpy
 )
 target_include_directories(test_normal PUBLIC extern/igl
     extern/eigen3
 )
+
+target_link_libraries(SphereMeshes cnpy)

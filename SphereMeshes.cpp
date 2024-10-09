@@ -46,7 +46,13 @@ MatrixXf SphereMeshBase::polygon_fan(int u, const MatrixXf &V) const{
 }
 
 Positions::Positions(const string &filename, MatrixXi &F) {
-    igl::readOFF(filename, V, F);
+    string format = filename.substr(filename.size() - 4);
+    if (format == ".off") {
+        igl::readOFF(filename, V, F);
+    } else if (format == ".obj") {
+        igl::readOBJ(filename, V, F);
+    }
+    // igl::readOFF(filename, V, F);
     int nv = V.rows(), nf = F.rows();
     igl::per_face_normals_stable(V, F, N);
     assert(N.rows() == nf);
