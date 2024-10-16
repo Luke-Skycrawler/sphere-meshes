@@ -2,6 +2,7 @@
 #include <Eigen/Dense>
 #include <queue>
 #include <vector>
+#include <tuple>
 #include "SQEM.h"
 #include "DirectionalWidth.h"
 
@@ -48,7 +49,10 @@ struct SphereMesh {
     int nv, ne, nf, nv_valid, nf_valid;
     void simplify(int nv_target);
     // Eigen::Vector3f compute_normal(const Eigen::Vector3i &f, const Eigen::Vector3f &n0) const;
-    void export_ply(const std::string &filename) const;
+    void export_ply(const std::string &filename) const {
+        export_ply(filename, V, R, F);
+    }
+    void export_ply(const std::string &filename, const Eigen::MatrixXf & V, const Eigen::VectorXf &R, const Eigen::MatrixXi &F) const;
 
 // private: 
     DirectionalWidth dw;
@@ -60,6 +64,9 @@ struct SphereMesh {
     SphereMesh::SphereMesh(const std::string &filename = "bar.obj");
     float area(const Eigen::Vector3i &f) const;
     void delete_face(int f);
+
+    std::tuple<Eigen::MatrixXf, Eigen::VectorXf, Eigen::MatrixXi> lazy_delete() const;
+    void init_queue();
     inline int add_sphere(ColapsedEdge &cuv) {
         int w = nv ++;
         auto s {cuv.s};

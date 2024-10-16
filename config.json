@@ -1,5 +1,7 @@
 {
-    "input_file": "../assets/bar.obj",
+    "input_file": "../assets/sphere.obj",
     "output_file": "../output/bar_deformed.ply",
-    "nv_target": 2
+    "nv_end": 1,
+    "nv_start": 50, 
+    "nv_step": 5
 }

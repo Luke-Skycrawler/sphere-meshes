@@ -23,7 +23,7 @@ MatrixXd load_Phi() {
 void displace(int col, double magnitude, const MatrixXd &Q, MatrixXf &V) {
 
     VectorXd q = Q.row(col) * magnitude;
-    assert(V.rows() * 3 == q.rows());
+    // assert(V.rows() * 3 == q.rows());
     for (int i = 0; i < V.rows(); i++) {
         V.row(i) += q.segment<3>(3 * i).cast<float>();
     }
@@ -34,28 +34,46 @@ int main() {
     json data = json::parse(config);
     string input_file = data["input_file"];
     string output_file = data["output_file"];
-    int nv_target = data["nv_target"];
-
+    string basename = output_file.substr(0, output_file.find_last_of("."));
+    int nv_end = data["nv_end"];
+    int nv_start = data["nv_start"];
+    int nv_step = data["nv_step"];
+    
     // SphereMesh mesh("../assets/hand.off");
     // DeformedMesh mesh(1, "../assets/hand.off");
     // DeformedMesh mesh(1, input_file);
     // DeformedMesh mesh(1, "../output/bar2_deformed.obj");
     SphereMesh mesh(input_file);
 
-    auto &V {mesh.V};
-    auto &R {mesh.R};
+    // auto &V {mesh.V};
+    // auto &R {mesh.R};
     
     // MatrixXd Q = load_Phi();
     // displace(1238, 1.0, Q, V);
     // igl::writeOBJ("../output/bar2_deformed.obj", V, mesh.F);
 
-    mesh.simplify(nv_target);
-    cout << "#V = " << V.rows() << endl << V.transpose() << endl;
-    cout << "#R = " << R.rows() << endl << R.transpose() << endl;
-    cout << "#F = " << mesh.F.rows() << endl << mesh.F << endl;
+    int frame = 0;
+    mesh.init_queue();
+    for (int nv_target = nv_start; nv_target >= nv_end; nv_target --) {
+        mesh.simplify(nv_target); 
+        if (nv_target % nv_step == 0) {
+            auto [V, R, F] = mesh.lazy_delete();
+            string seq = basename + to_string(frame ++) + ".ply";
+            mesh.export_ply(seq, V, R, F);
+        }
+    }
+    
+
+    auto [V, R, F] = mesh.lazy_delete();
 
     // mesh.export_ply("../output/hand.ply");
-    mesh.export_ply(output_file);
+    string seq = basename + to_string(frame ++) + ".ply";
+    cout << "final mesh: " << seq << endl;
+    mesh.export_ply(seq, V, R, F);
+
+    cout << "#V = " << V.rows() << endl << V.transpose() << endl;
+    cout << "#R = " << R.rows() << endl << R.transpose() << endl;
+    cout << "#F = " << F.rows() << endl << F << endl;
 
     return 0;
 }

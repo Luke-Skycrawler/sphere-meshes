@@ -100,8 +100,7 @@ SQEM SphereMesh::Q(int u) const {
     for (int i = NI(u); i < NI(u + 1); i ++) if (Fvalid(VF(i))){
         int fu = VF(i);
         Vector3f nu {N.row(fu)};
-        Vector3f _Vu = Vu + nu * R(u);
-        q += SQEM(_Vu, nu) * (area(F.row(fu)) / 3.0);
+        q += SQEM(Vu, nu) * (area(F.row(fu)) / 3.0);
     }
     return q;
 }
@@ -131,7 +130,6 @@ ColapsedEdge SphereMesh::argmin_sqe(int u, int v) const {
     boundw.col(0) = lu.cwiseMin(lv);
     boundw.col(1) = uu.cwiseMax(uv);
     float radius_bound = 0.75f * dw.W(boundw);
-
     sqem.minimize(center, r, Vu, Vv, radius_bound);
     double c = sqem.evaluate(center, r);
     return {static_cast<float>(c), u, v, {center, r}, sqem, boundw};
@@ -192,6 +190,9 @@ void SphereMesh::reconnect_triangles(int u, int v, int w){
                         }
                         else {
                             F.row(fu) = Vector3i{w, j, INVALID};
+                            VF.conservativeResize(VF.rows() + 1);
+                            VF(VF.rows() - 1) = fu;
+                            NI(w + 1) += 1;
                         }
                         break;       
                     }
@@ -223,12 +224,15 @@ void SphereMesh::delete_face(int f) {
     nf_valid --;
     Fvalid(f) = false;
 }
-void SphereMesh::simplify(int nv_target) {
+
+void SphereMesh::init_queue(){
     for (int i = 0; i < ne; i ++) {
         int u = E(i, 0), v = E(i, 1);
         auto cuv = argmin_sqe(u, v);
         q.push(cuv);
     }
+}
+void SphereMesh::simplify(int nv_target) {
     while (!q.empty() && nv_valid > nv_target) {
         auto cuv = q.top();
         q.pop();
@@ -250,6 +254,8 @@ void SphereMesh::simplify(int nv_target) {
             // two vertices are collapsed into one
         }
     }
+}
+tuple<MatrixXf, VectorXf, MatrixXi> SphereMesh::lazy_delete() const{
     MatrixXf Vnew(nv_valid, 3);
     VectorXf Rnew(nv_valid);
     VectorXi Vmap(nv);
@@ -261,8 +267,6 @@ void SphereMesh::simplify(int nv_target) {
             Vnew.row(v++) = V.row(i);
         }
     }
-    V = Vnew;
-    R = Rnew;
 
     MatrixXi Fnew(nf, 3);
     const auto map = [&](Vector3i f) -> Vector3i {
@@ -277,11 +281,14 @@ void SphereMesh::simplify(int nv_target) {
             Fnew.row(f++) = map(fi);
         }
     }
-    F = Fnew;
-    F.conservativeResize(f, NoChange);
-}
 
-void SphereMesh::export_ply(const string &fname) const {
+    // V = Vnew;
+    // R = Rnew;
+    // F = Fnew;
+    Fnew.conservativeResize(f, NoChange);
+    return {Vnew, Rnew, Fnew};
+}
+void SphereMesh::export_ply(const string &fname, const MatrixXf &V, const VectorXf &R, const MatrixXi &F) const {
 
     std::string plyname = fname;
     std::ofstream fout(plyname);
