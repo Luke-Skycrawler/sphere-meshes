@@ -288,7 +288,7 @@ public:
     }
     
     inline 
-    SQEM operator * (double w) {
+    SQEM operator * (double w) const {
         SQEM res;
 
         for( unsigned int i = 0 ; i < 10 ; ++i )

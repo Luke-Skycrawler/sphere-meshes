@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_CXX_STANDARD 17)
 project(SphereMeshes)
 find_package(ZLIB REQUIRED)
+find_package(pybind11 REQUIRED)
 set(ENABLE_STATIC ON)
 add_subdirectory("extern/cnpy")
 add_executable(SphereMeshes 
@@ -30,3 +31,6 @@ target_include_directories(test_normal PUBLIC extern/libigl
     extern/eigen3
 )
 target_link_libraries(SphereMeshes cnpy)
+
+
+pybind11_add_module(sqem SQEM.h bindings.cpp)

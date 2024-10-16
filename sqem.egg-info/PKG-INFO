@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: sqem
+Version: 0.0.1
+Summary: sqem python binding
+Author: Haoyang Shi
+Author-email: haoyang.shi@utah.edu
+Requires-Python: >=3.7

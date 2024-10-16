@@ -1,0 +1,7 @@
+README.md
+setup.py
+sqem.egg-info/PKG-INFO
+sqem.egg-info/SOURCES.txt
+sqem.egg-info/dependency_links.txt
+sqem.egg-info/not-zip-safe
+sqem.egg-info/top_level.txt
