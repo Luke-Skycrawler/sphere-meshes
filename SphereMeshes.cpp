@@ -288,11 +288,15 @@ tuple<MatrixXf, VectorXf, MatrixXi> SphereMesh::lazy_delete() const{
     Fnew.conservativeResize(f, NoChange);
     return {Vnew, Rnew, Fnew};
 }
-void SphereMesh::export_ply(const string &fname, const MatrixXf &V, const VectorXf &R, const MatrixXi &F) const {
+
+
+void export_ply(const string &fname, const MatrixXf &V, const VectorXf &R, const MatrixXi &F) {
 
     std::string plyname = fname;
     std::ofstream fout(plyname);
 
+    int nv_valid = V.rows();
+    int nf_valid = F.rows();
     //	GraphVertexIterator gvi,gvi_end;
     fout << "ply" << std::endl;
     fout << "format ascii 1.0" << std::endl;

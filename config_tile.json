@@ -1,0 +1,7 @@
+{
+    "input_file": "../assets/cap.off",
+    "output_file": "../output/soup.ply",
+    "nv_end": 1,
+    "nv_start": 4, 
+    "nv_step": 1
+}
